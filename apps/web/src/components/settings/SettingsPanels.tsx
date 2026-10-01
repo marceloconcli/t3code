@@ -1,3 +1,4 @@
+import { useSessionWorkspace } from "../session-workspace/store";
 import { SettingsGroup } from "./SettingsGroup";
 import { Spinner } from "~/components/ui/spinner";
 import { NotificationSettings } from "./NotificationSettings";
@@ -509,6 +510,7 @@ function AboutVersionSection() {
 }
 
 export function useSettingsRestore(onRestored?: () => void) {
+  const sessionWorkspaceAvailable = useSessionWorkspace((state) => state.available);
   const {
     theme,
     setTheme,
@@ -529,6 +531,7 @@ export function useSettingsRestore(onRestored?: () => void) {
 
   const changedSettingLabels = useMemo(
     () => [
+      ...(sessionWorkspaceAvailable ? ["Split-session workspace"] : []),
       ...(theme !== "system" ? ["Theme"] : []),
       ...(!followSystem ? ["Follow system"] : []),
       ...(themeHalves !== null ? ["Theme mix"] : []),
@@ -637,6 +640,7 @@ export function useSettingsRestore(onRestored?: () => void) {
         : []),
     ],
     [
+      sessionWorkspaceAvailable,
       isTextGenerationModelDirty,
       isBackgroundActivityDirty,
       settings.browserDefaultViewport,
@@ -819,6 +823,7 @@ export function useSettingsRestore(onRestored?: () => void) {
       // rather than discovering it later.
       enableAgentBrowserAccess: DEFAULT_UNIFIED_SETTINGS.enableAgentBrowserAccess,
     });
+    useSessionWorkspace.getState().setAvailable(false);
     onRestored?.();
   }, [
     changedSettingLabels,
@@ -2142,6 +2147,8 @@ function LegacyFeaturesSection() {
 }
 
 export function GeneralSettingsPanel() {
+  const sessionWorkspaceAvailable = useSessionWorkspace((state) => state.available);
+  const sessionWorkspaceNotice = useSessionWorkspace((state) => state.notice);
   const modifierLabel = isMacPlatform(navigator.platform) ? "⌘" : "Ctrl";
   const sendShortcutOptions = [
     { value: "enter", label: "Enter" },
@@ -2232,6 +2239,33 @@ export function GeneralSettingsPanel() {
   return (
     <SettingsPageContainer>
       <ProjectDefaultsSettings category="general" />
+      <SettingsSection id="layout-options" title="Layout options">
+        <SettingsRow
+          {...searchableSetting("split-session-workspace")}
+          description={
+            sessionWorkspaceNotice?.startsWith("Layout preference")
+              ? sessionWorkspaceNotice
+              : "Allow multiple conversations in split groups in this browser or app. Turning this off returns to single view and keeps the saved layout."
+          }
+          resetAction={
+            sessionWorkspaceAvailable ? (
+              <SettingResetButton
+                label="split-session workspace"
+                onClick={() => useSessionWorkspace.getState().setAvailable(false)}
+              />
+            ) : null
+          }
+          control={
+            <Switch
+              aria-label="Split-session workspace (experimental)"
+              checked={sessionWorkspaceAvailable}
+              onCheckedChange={(checked) =>
+                useSessionWorkspace.getState().setAvailable(Boolean(checked))
+              }
+            />
+          }
+        />
+      </SettingsSection>
       <SettingsSection id="organization" title="Organization">
         <SettingsRow
           {...searchableSetting("project-grouping")}

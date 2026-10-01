@@ -1,4 +1,6 @@
 import { isChatGptUsageLimitError } from "@t3tools/shared/usageLimits";
+import { useSessionPane } from "./session-workspace/PaneContext";
+import { useSessionWorkspace } from "./session-workspace/store";
 import { useLoadBalancedEnvironment } from "../hooks/useLoadBalancedEnvironment";
 import { visibleThreadPullRequests } from "@t3tools/shared/threadPullRequests";
 import type { UsageLimitSourceSnapshots } from "@t3tools/contracts";
@@ -1475,6 +1477,9 @@ function releaseChatTimelineAnchor<T extends { readonly messageId: MessageId | n
 }
 
 export default function ChatView(props: ChatViewProps) {
+  const sessionPane = useSessionPane();
+  const sessionWorkspaceAvailable = useSessionWorkspace((state) => state.available);
+  const ownsInput = useCallback(() => sessionPane?.ownsInput() ?? true, [sessionPane]);
   const {
     environmentId,
     threadId,
@@ -1758,7 +1763,8 @@ export default function ChatView(props: ChatViewProps) {
   >({});
   const [pendingUserInputQuestionIndexByRequestId, setPendingUserInputQuestionIndexByRequestId] =
     useState<Record<string, number>>({});
-  const shouldUseRightPanelSheet = useMediaQuery(RIGHT_PANEL_INLINE_LAYOUT_MEDIA_QUERY);
+  const smallRightPanel = useMediaQuery(RIGHT_PANEL_INLINE_LAYOUT_MEDIA_QUERY);
+  const shouldUseRightPanelSheet = sessionPane !== null || smallRightPanel;
   const isMobileViewport = useMediaQuery("max-sm");
   const [terminalFocusRequestId, setTerminalFocusRequestId] = useState(0);
   const [pullRequestDialogState, setPullRequestDialogState] =
@@ -2054,7 +2060,7 @@ export default function ChatView(props: ChatViewProps) {
     [activeKnownTerminalIds, panelTerminalIds],
   );
   const previewPanelOpen = activeRightPanelKind === "preview" && isPreviewSupportedInRuntime();
-  const rightPanelOpen = rightPanelState.isOpen;
+  const rightPanelOpen = rightPanelState.isOpen && (sessionPane === null || sessionPane.focused);
   const { active: panelAnimationsActive, durationMs: panelAnimationDurationMs } =
     usePanelAnimationSettings();
   const activeTerminalDrawerPresence = usePanelPresence(
@@ -2124,13 +2130,14 @@ export default function ChatView(props: ChatViewProps) {
   // timestamp backwards).
   useEffect(() => {
     const completedAt = serverThread?.latestTurn?.completedAt;
-    if (!serverThread?.id || !completedAt) return;
+    if (!serverThread?.id || !completedAt || !ownsInput()) return;
     markThreadVisited(
       scopedThreadKey(scopeThreadRef(serverThread.environmentId, serverThread.id)),
       completedAt,
     );
   }, [
     markThreadVisited,
+    ownsInput,
     serverThread?.environmentId,
     serverThread?.id,
     serverThread?.latestTurn?.completedAt,
@@ -3981,8 +3988,8 @@ export default function ChatView(props: ChatViewProps) {
     buildRunningThreadTurnInterruptInput(activeThread, phase) !== null;
 
   const focusComposer = useCallback(() => {
-    composerRef.current?.focusAtEnd();
-  }, [composerRef]);
+    if (ownsInput()) composerRef.current?.focusAtEnd();
+  }, [composerRef, ownsInput]);
   useEffect(() => subscribeSnapShotComposerFocus(focusComposer), [focusComposer]);
   const scheduleComposerFocus = useCallback(() => {
     window.requestAnimationFrame(() => {
@@ -5210,9 +5217,9 @@ export default function ChatView(props: ChatViewProps) {
   useEffect(
     () =>
       subscribePreviewAction((action) => {
-        if (action === "toggle-panel") togglePreviewPanel();
+        if (ownsInput() && action === "toggle-panel") togglePreviewPanel();
       }),
-    [togglePreviewPanel],
+    [togglePreviewPanel, ownsInput],
   );
   const persistThreadSettingsForNextTurn = useCallback(
     async (input: {
@@ -5510,6 +5517,7 @@ export default function ChatView(props: ChatViewProps) {
         // the end on the next stream chunk. Clicking message text can leave
         // DOM focus on body, so these keys must also be heard at document.
         const handleKeyDown = (event: KeyboardEvent) => {
+          if (!ownsInput()) return;
           if (
             !(event.target instanceof Node) ||
             (!scrollNode.contains(event.target) &&
@@ -5586,7 +5594,7 @@ export default function ChatView(props: ChatViewProps) {
       }
       removeListeners?.();
     };
-  }, [activeThread?.id, isTimelineAtLogicalEnd, timelineRealContentOverflowsViewport]);
+  }, [activeThread?.id, isTimelineAtLogicalEnd, timelineRealContentOverflowsViewport, ownsInput]);
 
   const onTimelineAnchorReady = useCallback((messageId: MessageId, anchorIndex: number) => {
     // Anchored-end space can be remeasured when the turn completes. Once the
@@ -5742,14 +5750,14 @@ export default function ChatView(props: ChatViewProps) {
   }, [activeThread?.id, routeThreadKey]);
 
   useEffect(() => {
-    if (!activeThread?.id || terminalUiState.terminalOpen) return;
+    if (!activeThread?.id || terminalUiState.terminalOpen || sessionPane !== null) return;
     const frame = window.requestAnimationFrame(() => {
       focusComposer();
     });
     return () => {
       window.cancelAnimationFrame(frame);
     };
-  }, [activeThread?.id, focusComposer, terminalUiState.terminalOpen]);
+  }, [activeThread?.id, focusComposer, terminalUiState.terminalOpen, sessionPane]);
 
   // Tabbing back into the app lands focus wherever it last was, often the right panel or the
   // body. Put it in the composer unless something that takes typing already holds it. The
@@ -5767,7 +5775,8 @@ export default function ChatView(props: ChatViewProps) {
       frame = window.requestAnimationFrame(() => {
         frame = window.requestAnimationFrame(() => {
           frame = null;
-          if (shouldRefocusComposerOnWindowFocus(document.activeElement)) focusComposer();
+          if (ownsInput() && shouldRefocusComposerOnWindowFocus(document.activeElement))
+            focusComposer();
         });
       });
     };
@@ -5776,7 +5785,7 @@ export default function ChatView(props: ChatViewProps) {
       window.removeEventListener("focus", onWindowFocus);
       if (frame !== null) window.cancelAnimationFrame(frame);
     };
-  }, [activeThread?.id, focusComposer, isMobileViewport, terminalUiState.terminalOpen]);
+  }, [activeThread?.id, focusComposer, isMobileViewport, terminalUiState.terminalOpen, ownsInput]);
 
   useEffect(() => {
     if (!activeThread?.id) return;
@@ -6046,9 +6055,9 @@ export default function ChatView(props: ChatViewProps) {
     return () => window.clearTimeout(id);
   }, [activeThreadShell?.snoozedUntil, activeThreadSnoozed, snoozeWakeTick]);
   const acknowledgeActiveThreadWoke = useCallback(() => {
-    if (activeThreadRef === null || activeThreadWokeAt === null) return;
+    if (activeThreadRef === null || activeThreadWokeAt === null || !ownsInput()) return;
     markThreadVisited(scopedThreadKey(activeThreadRef), activeThreadWokeAt);
-  }, [activeThreadRef, activeThreadWokeAt, markThreadVisited]);
+  }, [activeThreadRef, activeThreadWokeAt, markThreadVisited, ownsInput]);
   // Mirror of the sidebar's Woke pill for the open thread.
   const activeThreadLastVisitedAt = useUiStateStore((store) =>
     activeThreadKey === null ? undefined : store.threadLastVisitedAtById[activeThreadKey],
@@ -6687,6 +6696,7 @@ export default function ChatView(props: ChatViewProps) {
 
   useEffect(() => {
     const handler = (event: globalThis.KeyboardEvent) => {
+      if (!ownsInput()) return;
       if (preventRepeatedTerminalCloseShortcut(event, keybindings)) {
         event.stopPropagation();
         return;
@@ -6964,6 +6974,7 @@ export default function ChatView(props: ChatViewProps) {
     confirmAndUnpinThread,
     copyActiveThreadReference,
     getShortcutContext,
+    ownsInput,
     toggleRightPanel,
     toggleRightPanelMaximized,
     toggleTerminalVisibility,
@@ -6975,6 +6986,7 @@ export default function ChatView(props: ChatViewProps) {
   // Route it to the composer like a typed key, which also expands it.
   useEffect(() => {
     const keyHandler = (event: KeyboardEvent) => {
+      if (!ownsInput()) return;
       if (
         shouldRedirectInputToComposer(event) &&
         isPasteAsTextShortcut(event, isMacPlatform(navigator.platform))
@@ -6983,7 +6995,7 @@ export default function ChatView(props: ChatViewProps) {
       }
     };
     const handler = (event: ClipboardEvent) => {
-      if (!activeThreadId || isCommandPaletteOpen()) return;
+      if (!activeThreadId || !ownsInput() || isCommandPaletteOpen()) return;
       if (getTerminalFocusOwner() !== null) return;
       if (composerRef.current?.isModelPickerOpen()) return;
       const text = pasteTextToFocusComposer(event);
@@ -7006,7 +7018,7 @@ export default function ChatView(props: ChatViewProps) {
       window.removeEventListener("keydown", keyHandler, true);
       window.removeEventListener("paste", handler, true);
     };
-  }, [activeThreadId, composerRef]);
+  }, [activeThreadId, composerRef, ownsInput]);
 
   const [pendingRevert, setPendingRevert] = useState<{
     turnCount: number;
@@ -9735,9 +9747,11 @@ export default function ChatView(props: ChatViewProps) {
         {/* Top bar */}
         <WorkspacePageHeader
           data-chat-header
-          electron={isElectron}
-          reserveNativeControls={reserveTitleBarControlInset && !inlineRightPanelOwnsTitleBar}
-          className="relative bg-background"
+          electron={isElectron && sessionPane === null}
+          reserveNativeControls={
+            sessionPane === null && reserveTitleBarControlInset && !inlineRightPanelOwnsTitleBar
+          }
+          className={cn("relative bg-background", sessionPane !== null && "!pl-2 !pr-2 gap-1")}
         >
           {isElectron && rightPanelControlsAtRoot ? (
             <span
@@ -9745,8 +9759,22 @@ export default function ChatView(props: ChatViewProps) {
               className="pointer-events-none fixed top-[var(--workspace-controls-top)] right-[var(--workspace-controls-right)] h-[var(--workspace-topbar-height)] w-28 [-webkit-app-region:no-drag]"
             />
           ) : null}
-          {!rightPanelControlsAtRoot && !rightPanelControlsInPanel ? panelLayoutControls : null}
+          {sessionPane === null && !rightPanelControlsAtRoot && !rightPanelControlsInPanel
+            ? panelLayoutControls
+            : null}
           <ChatHeader
+            onSplitSessions={
+              sessionPane === null && sessionWorkspaceAvailable
+                ? () =>
+                    useSessionWorkspace
+                      .getState()
+                      .enable(
+                        routeKind === "draft" && draftId
+                          ? { kind: "draft", draftId }
+                          : { kind: "server", threadRef: routeThreadRef },
+                      )
+                : undefined
+            }
             {...(!supportsPullRequests || activeProjectRepository === null
               ? {}
               : { onOpenPullRequest: openProjectPullRequest })}
@@ -9774,6 +9802,9 @@ export default function ChatView(props: ChatViewProps) {
             onUpdateProjectScript={updateProjectScript}
             onDeleteProjectScript={deleteProjectScript}
           />
+          {sessionPane ? (
+            <div className="ml-auto flex shrink-0 items-center">{panelToggleControls}</div>
+          ) : null}
         </WorkspacePageHeader>
 
         {/* Main content area with optional plan sidebar */}
@@ -10175,7 +10206,10 @@ export default function ChatView(props: ChatViewProps) {
               </div>
             </div>
 
-            {activeThreadRef && activePreviewMiniPlayer && previewMiniPlayerVisible ? (
+            {activeThreadRef &&
+            activePreviewMiniPlayer &&
+            previewMiniPlayerVisible &&
+            (sessionPane?.focused ?? true) ? (
               <ThreadPreviewMiniPlayer
                 key={`${activeThreadKey}:${previewMiniPlayerSourceKey(activePreviewMiniPlayer.source)}`}
                 threadRef={activeThreadRef}
@@ -10235,24 +10269,26 @@ export default function ChatView(props: ChatViewProps) {
         </div>
         {/* end horizontal flex container */}
 
-        {mountedTerminalThreadRefs.map(({ key: mountedThreadKey, threadRef: mountedThreadRef }) => (
-          <PersistentThreadTerminalDrawer
-            key={mountedThreadKey}
-            threadRef={mountedThreadRef}
-            threadId={mountedThreadRef.threadId}
-            active={mountedThreadKey === activeThreadKey}
-            launchContext={
-              mountedThreadKey === activeThreadKey ? (activeTerminalLaunchContext ?? null) : null
-            }
-            focusRequestId={mountedThreadKey === activeThreadKey ? terminalFocusRequestId : 0}
-            splitShortcutLabel={splitTerminalShortcutLabel ?? undefined}
-            splitVerticalShortcutLabel={splitTerminalVerticalShortcutLabel ?? undefined}
-            newShortcutLabel={newTerminalShortcutLabel ?? undefined}
-            closeShortcutLabel={closeTerminalShortcutLabel ?? undefined}
-            keybindings={keybindings}
-            onAddTerminalContext={addTerminalContextToDraft}
-          />
-        ))}
+        {mountedTerminalThreadRefs
+          .filter(({ key }) => sessionPane === null || key === activeThreadKey)
+          .map(({ key: mountedThreadKey, threadRef: mountedThreadRef }) => (
+            <PersistentThreadTerminalDrawer
+              key={mountedThreadKey}
+              threadRef={mountedThreadRef}
+              threadId={mountedThreadRef.threadId}
+              active={mountedThreadKey === activeThreadKey && (sessionPane?.visible ?? true)}
+              launchContext={
+                mountedThreadKey === activeThreadKey ? (activeTerminalLaunchContext ?? null) : null
+              }
+              focusRequestId={mountedThreadKey === activeThreadKey ? terminalFocusRequestId : 0}
+              splitShortcutLabel={splitTerminalShortcutLabel ?? undefined}
+              splitVerticalShortcutLabel={splitTerminalVerticalShortcutLabel ?? undefined}
+              newShortcutLabel={newTerminalShortcutLabel ?? undefined}
+              closeShortcutLabel={closeTerminalShortcutLabel ?? undefined}
+              keybindings={keybindings}
+              onAddTerminalContext={addTerminalContextToDraft}
+            />
+          ))}
       </div>
 
       {rightPanelPresent && !shouldUseRightPanelSheet && activeThreadRef ? (

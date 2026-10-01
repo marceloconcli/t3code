@@ -23,7 +23,7 @@ function pointer(type: string, values: Partial<PointerEvent> = {}) {
   });
 }
 
-function gesture() {
+function gesture(onRelease?: (event: PointerEvent) => boolean) {
   const callbacks = {
     onStart: vi.fn(),
     onMove: vi.fn(),
@@ -37,7 +37,7 @@ function gesture() {
   const props = {
     active: "thread",
     event: pointer("pointerdown"),
-    options: { distance: 6, onAttach: vi.fn(), onFinish },
+    options: { distance: 6, onAttach: vi.fn(), onFinish, onRelease },
     ...callbacks,
   } as unknown as SensorProps<ConstructorParameters<typeof SidebarPointerSensor>[0]["options"]>;
   const sensor = new SidebarPointerSensor(props);
@@ -61,6 +61,30 @@ afterEach(() => {
 });
 
 describe("sidebar pointer lifecycle", () => {
+  it("does not reorder the sidebar after another surface accepts the drop", () => {
+    const release = vi.fn(() => true);
+    const drag = gesture(release);
+    document.dispatchEvent(pointer("pointermove", { clientY: 20 }));
+    document.dispatchEvent(pointer("pointerup", { buttons: 0, clientX: 400 }));
+    expect(release).toHaveBeenCalledOnce();
+    expect(drag.onCancel).toHaveBeenCalledOnce();
+    expect(drag.onEnd).not.toHaveBeenCalled();
+    expect(drag.onFinish).toHaveBeenCalledOnce();
+  });
+
+  it("keeps ordinary sidebar drops and clicks when no other surface accepts them", () => {
+    const release = vi.fn(() => false);
+    const click = gesture(release);
+    document.dispatchEvent(pointer("pointerup", { buttons: 0 }));
+    expect(release).not.toHaveBeenCalled();
+    expect(click.onAbort).toHaveBeenCalledOnce();
+    const drag = gesture(release);
+    document.dispatchEvent(pointer("pointermove", { clientY: 20 }));
+    document.dispatchEvent(pointer("pointerup", { buttons: 0 }));
+    expect(drag.onEnd).toHaveBeenCalledOnce();
+    expect(drag.onCancel).not.toHaveBeenCalled();
+  });
+
   it("keeps a click idle and starts only after the drag threshold", () => {
     const click = gesture();
     document.dispatchEvent(pointer("pointermove", { clientY: 16 }));

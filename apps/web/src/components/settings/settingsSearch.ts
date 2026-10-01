@@ -486,6 +486,12 @@ export const SETTINGS_SEARCH_ITEMS = [
     searchTerms: ["composer meter usage tokens circle old"],
   },
   {
+    id: "split-session-workspace",
+    title: "Split-session workspace (experimental)",
+    to: "/settings/general",
+    searchTerms: ["layout options split panes sessions parallel experimental opt in"],
+  },
+  {
     id: "legacy-sidebar",
     title: "Sidebar (legacy)",
     to: "/settings/general",

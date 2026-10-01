@@ -1,3 +1,4 @@
+import { useSessionPane } from "./session-workspace/PaneContext";
 import { scopedThreadKey } from "@t3tools/client-runtime/environment";
 import type { ScopedThreadRef } from "@t3tools/contracts";
 import { useNavigate } from "@tanstack/react-router";
@@ -46,6 +47,7 @@ import { resolveThreadSyncPhase } from "../threadSync";
  */
 export function ThreadRouteView({ target }: { target: ThreadRouteTarget }) {
   const navigate = useNavigate();
+  const pane = useSessionPane();
   const draftId = target.kind === "draft" ? target.draftId : null;
   const draftSession = useComposerDraftStore((store) =>
     draftId === null ? null : store.getDraftSession(draftId),
@@ -139,6 +141,10 @@ export function ThreadRouteView({ target }: { target: ThreadRouteTarget }) {
       if (cancelled) {
         return;
       }
+      if (pane) {
+        pane.promote({ kind: "server", threadRef: canonicalThreadRef });
+        return;
+      }
       void navigate({
         to: "/$environmentId/$threadId",
         params: buildThreadRouteParams(canonicalThreadRef),
@@ -148,14 +154,14 @@ export function ThreadRouteView({ target }: { target: ThreadRouteTarget }) {
     return () => {
       cancelled = true;
     };
-  }, [canonicalThreadRef, navigate]);
+  }, [canonicalThreadRef, navigate, pane]);
 
   useEffect(() => {
-    if (target.kind !== "draft" || draftSession || canonicalThreadRef) {
+    if (pane || target.kind !== "draft" || draftSession || canonicalThreadRef) {
       return;
     }
     void navigate({ to: "/", replace: true });
-  }, [canonicalThreadRef, draftSession, navigate, target.kind]);
+  }, [canonicalThreadRef, draftSession, navigate, target.kind, pane]);
 
   useEffect(() => {
     if (target.kind !== "server" || !bootstrapComplete) {
@@ -167,11 +173,11 @@ export function ThreadRouteView({ target }: { target: ThreadRouteTarget }) {
     if (renderState === "missing") {
       const { clearPendingFileDropsForThread } = useSidebarPendingFileDropStore.getState();
       clearPendingFileDropsForThread(target.threadRef);
-      if (environmentHasAnyThreads) {
+      if (environmentHasAnyThreads && !pane) {
         void navigate({ to: "/", replace: true });
       }
     }
-  }, [bootstrapComplete, environmentHasAnyThreads, navigate, renderState, target]);
+  }, [bootstrapComplete, environmentHasAnyThreads, navigate, renderState, target, pane]);
 
   useEffect(() => {
     if (target.kind !== "server" || !serverThreadStarted || !draftThread) {
@@ -185,7 +191,7 @@ export function ThreadRouteView({ target }: { target: ThreadRouteTarget }) {
     if (draftSession) {
       view = (
         <ChatView
-          key={target.draftId}
+          key={pane?.tabId ?? target.draftId}
           draftId={target.draftId}
           environmentId={draftSession.environmentId}
           threadId={draftSession.threadId}
@@ -197,7 +203,7 @@ export function ThreadRouteView({ target }: { target: ThreadRouteTarget }) {
   } else if (renderState === "ready" || (renderState === "loading" && serverThreadShell !== null)) {
     view = (
       <ChatView
-        {...(nextChatViewKey ? { key: nextChatViewKey.key } : {})}
+        key={pane?.tabId ?? nextChatViewKey?.key}
         environmentId={target.threadRef.environmentId}
         threadId={target.threadRef.threadId}
         routeKind="server"
@@ -206,6 +212,19 @@ export function ThreadRouteView({ target }: { target: ThreadRouteTarget }) {
     );
   }
 
+  if (pane) {
+    return (
+      <div className="flex h-full min-h-0 min-w-0 flex-1 overflow-hidden">
+        {view ?? (
+          <div role="status" className="m-auto p-4 text-sm text-muted-foreground">
+            {renderState === "missing" || (target.kind === "draft" && !draftSession)
+              ? "This session is unavailable. Close this tab or select another session."
+              : "Connecting to session…"}
+          </div>
+        )}
+      </div>
+    );
+  }
   return (
     <SidebarInset className="h-svh min-h-0 overflow-hidden overscroll-y-none md:h-dvh">
       {view}

@@ -1,4 +1,5 @@
 import { useAtomValue } from "@effect/atom-react";
+import { useSessionPane } from "./session-workspace/PaneContext";
 import {
   isAtomCommandInterrupted,
   squashAtomCommandFailure,
@@ -351,6 +352,8 @@ export function TerminalViewport({
   drawerHeight,
   keybindings,
 }: TerminalViewportProps) {
+  const sessionPane = useSessionPane();
+  const ownsInput = useEffectEvent(() => sessionPane?.ownsInput() ?? true);
   const containerRef = useRef<HTMLDivElement>(null);
   const terminalRef = useRef<GhosttyTerminalSurface | null>(null);
   const visibleRef = useRef(visible);
@@ -544,7 +547,7 @@ export function TerminalViewport({
       synchronizedStatusRef.current = "closed";
       synchronizeTerminalStatus(terminal, latestSession.status);
       // Startup may finish after the user has returned to the composer.
-      if (visibleRef.current && mount.contains(document.activeElement)) {
+      if (ownsInput() && visibleRef.current && mount.contains(document.activeElement)) {
         terminal.focus();
       }
 
@@ -603,7 +606,7 @@ export function TerminalViewport({
       const addSelectionToChat = (selection: TerminalContextSelection) => {
         handleAddTerminalContext(selection);
         terminalRef.current?.clearSelection();
-        terminalRef.current?.focus();
+        if (ownsInput()) terminalRef.current?.focus();
       };
 
       // A selection-action flow that was superseded while its async work ran
@@ -617,7 +620,7 @@ export function TerminalViewport({
       };
 
       const focusIfCurrent = (requestId: number) => {
-        if (requestId === selectionActionRequestIdRef.current) {
+        if (requestId === selectionActionRequestIdRef.current && ownsInput()) {
           terminalRef.current?.focus();
         }
       };
@@ -954,7 +957,7 @@ export function TerminalViewport({
   }, [terminalOutput, terminalError, terminalStatus, terminalVersion]);
 
   useEffect(() => {
-    if (!autoFocus || !visible) return;
+    if (!autoFocus || !visible || !ownsInput()) return;
     // Claim focus when requested, then hand it to the terminal once ready only
     // if the user has not focused something else in the meantime.
     (terminalRef.current ?? containerRef.current)?.focus();

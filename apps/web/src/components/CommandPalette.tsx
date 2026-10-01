@@ -1,5 +1,7 @@
 "use client";
 
+import { useSessionWorkspace } from "./session-workspace/store";
+
 import { threadPullRequestLinkMode } from "@t3tools/client-runtime/thread-pull-request-compatibility";
 import { visibleThreadPullRequests } from "@t3tools/shared/threadPullRequests";
 
@@ -1774,7 +1776,27 @@ function OpenCommandPaletteDialog(props: {
     pushPaletteView,
   ]);
 
+  const routeTarget = useParams({
+    strict: false,
+    select: (params) => resolveThreadRouteTarget(params),
+  });
   const actionItems: Array<CommandPaletteActionItem | CommandPaletteSubmenuItem> = [];
+  const sessionWorkspaceAvailable = useSessionWorkspace((state) => state.available);
+  if (routeTarget && sessionWorkspaceAvailable) {
+    actionItems.push({
+      kind: "action",
+      value: "action:session-workspace",
+      title: "Toggle split-session workspace",
+      searchTerms: ["split", "sessions", "workspace", "panes", "tabs", "parallel"],
+      icon: <SquarePenIcon className={ITEM_ICON_CLASS} />,
+      shortcutCommand: "workspace.toggle",
+      run: async () => {
+        const state = useSessionWorkspace.getState();
+        if (state.enabled) state.disable();
+        else state.enable(routeTarget);
+      },
+    });
+  }
 
   if (projects.length > 0) {
     const activeProjectTitle =

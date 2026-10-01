@@ -166,3 +166,23 @@ Choose **Snooze → Custom…** from a thread's menu to pick a date and time in 
 local time zone, or a duration in minutes, hours, or days. Durations start when
 you confirm; one day means 24 hours. On web and desktop, you can also snooze
 several selected threads together. Choose **Wake thread** to bring a thread back early.
+
+## Work with sessions side by side
+
+Enable **Settings → General → Layout options → Split-session workspace
+(experimental)**, then choose **Split sessions** in a chat header or use the
+command palette. The preference is off by default.
+
+Drag a session tab or a thread from the default sidebar to a group's edge to
+split it, or to its center to group sessions as tabs. You can also choose an
+existing session with the group controls. Up to five groups and twelve tabs can
+be open. Drag dividers to resize; keyboard users can focus a divider and use
+arrow keys or Home. Narrow windows show the focused group with a group selector.
+
+The focused chat receives keyboard commands and opens its tool panels. Closing
+a tab leaves the agent running. Closing the last tab, choosing **Single view**,
+or disabling the preference returns to a single chat. Reopening the workspace
+restores its remaining tabs and layout in this browser/app.
+
+Use separate worktrees when independent sessions change the same repository.
+The optional `workspace.toggle` keybinding has no default shortcut.

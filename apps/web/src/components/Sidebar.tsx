@@ -1,3 +1,5 @@
+import { startSessionDrag, finishSessionDrag } from "./session-workspace/drag";
+import { useSessionWorkspace } from "./session-workspace/store";
 import { requestCustomSnooze } from "./CustomSnoozeDialog";
 import { useSupportsMultiplePullRequests } from "~/hooks/useSupportsMultiplePullRequests";
 import { resolveThreadCurrentPullRequestLink } from "@t3tools/shared/threadPullRequests";
@@ -3202,6 +3204,7 @@ export default function Sidebar() {
   const dragTargetSection = dragState?.targetSection ?? null;
   const dragSensorRef = useRef<SidebarPointerSensor | null>(null);
   const finishThreadDrag = useCallback((started: boolean) => {
+    useSessionWorkspace.setState({ dragTarget: null });
     dragSensorRef.current = null;
     if (started) {
       listMotionRef.current?.release();
@@ -3219,6 +3222,12 @@ export default function Sidebar() {
       distance: 6,
       onAttach: attachDragSensor,
       onFinish: finishThreadDrag,
+      onRelease: (event: PointerEvent) => {
+        const target = finishSessionDrag(event.clientX, event.clientY);
+        if (!target) return false;
+        if (target.kind === "server") navigateToThread(target.threadRef);
+        return true;
+      },
     }),
   );
   const sectionByThreadKey = useMemo(() => {
@@ -3363,6 +3372,12 @@ export default function Sidebar() {
       const activeKey = String(event.active.id);
       const activeSection = sectionByThreadKey.get(activeKey);
       if (activeSection === undefined) return;
+      const dragged = threadByKey.get(activeKey);
+      if (dragged)
+        startSessionDrag({
+          kind: "server",
+          threadRef: scopeThreadRef(dragged.environmentId, dragged.id),
+        });
       // Stop normal section motion before dnd-kit measures the picked-up row.
       listMotionRef.current?.suspend();
       const list = threadListRef.current;
@@ -3384,7 +3399,7 @@ export default function Sidebar() {
           event.activatorEvent instanceof PointerEvent ? event.activatorEvent.clientY : null,
       });
     },
-    [sectionByThreadKey],
+    [sectionByThreadKey, threadByKey],
   );
   // Include every visible row in the measured order. Older servers disable
   // pickup on their rows without changing where those rows render.

@@ -1,3 +1,4 @@
+import { useSessionPane } from "../session-workspace/PaneContext";
 import { DESKTOP_PASTE_AS_TEXT_EVENT } from "../../lib/desktopPasteAsText";
 import { isLocalEnvironmentDisabled } from "../../localEnvironment";
 import { usePrimaryEnvironmentId } from "../../state/environments";
@@ -1488,6 +1489,7 @@ export interface ChatComposerProps {
 // --------------------------------------------------------------------------
 
 export const ChatComposer = memo(function ChatComposer(props: ChatComposerProps) {
+  const sessionPane = useSessionPane();
   const {
     composerDraftTarget,
     environmentId,
@@ -2211,6 +2213,7 @@ export const ChatComposer = memo(function ChatComposer(props: ChatComposerProps)
       pasteAsTextShortcutUntilRef.current = 0;
     };
     const onDesktopPasteAsText = () => {
+      if (sessionPane && !sessionPane.ownsInput()) return;
       const activeElement = document.activeElement;
       const blocksPasteToFocus =
         activeElement instanceof Element &&
@@ -2232,7 +2235,7 @@ export const ChatComposer = memo(function ChatComposer(props: ChatComposerProps)
       window.removeEventListener("keydown", onKeyDown, true);
       window.removeEventListener("blur", onBlur);
     };
-  }, []);
+  }, [sessionPane]);
 
   // ------------------------------------------------------------------
   // Derived: composer send state
@@ -5219,6 +5222,7 @@ export const ChatComposer = memo(function ChatComposer(props: ChatComposerProps)
 
   useEffect(() => {
     const handler = (event: globalThis.KeyboardEvent) => {
+      if (sessionPane && !sessionPane.ownsInput()) return;
       const command = resolveShortcutCommand(event, keybindings, {
         context: {
           terminalFocus: getTerminalFocusOwner() !== null,
@@ -5246,6 +5250,7 @@ export const ChatComposer = memo(function ChatComposer(props: ChatComposerProps)
     window.addEventListener("keydown", handler, true);
     return () => window.removeEventListener("keydown", handler, true);
   }, [
+    sessionPane,
     activePendingProgress,
     isComposerApprovalState,
     isComposerModelPickerOpen,

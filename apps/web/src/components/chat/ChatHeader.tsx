@@ -67,6 +67,7 @@ interface ChatHeaderProps {
   keybindings: ResolvedKeybindingsConfig;
   availableEditors: ReadonlyArray<EditorId>;
   rightPanelOpen: boolean;
+  onSplitSessions?: (() => void) | undefined;
   gitCwd: string | null;
   readonly onOpenPullRequest?: ((number: number) => void) | undefined;
   onNewThreadInProject: () => void;
@@ -136,6 +137,7 @@ export const ChatHeader = memo(function ChatHeader({
   keybindings,
   availableEditors,
   rightPanelOpen,
+  onSplitSessions,
   gitCwd,
   onOpenPullRequest,
   onNewThreadInProject,
@@ -498,6 +500,11 @@ export const ChatHeader = memo(function ChatHeader({
           "[[data-panel-animations=true]_&]:motion-safe:transition-[padding-right] [[data-panel-animations=true]_&]:motion-safe:duration-(--panel-animation-duration) [[data-panel-animations=true]_&]:motion-safe:ease-out",
         )}
       >
+        {onSplitSessions ? (
+          <Button variant="ghost" size="sm" onClick={onSplitSessions}>
+            Split sessions
+          </Button>
+        ) : null}
         <Menu open={actionsCollapsed && actionsOpen} onOpenChange={setActionsOpen}>
           <MenuTrigger
             className={

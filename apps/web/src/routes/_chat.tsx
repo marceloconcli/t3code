@@ -1,9 +1,10 @@
+import { useSessionWorkspace } from "../components/session-workspace/store";
 import { Outlet, createFileRoute, redirect, useParams } from "@tanstack/react-router";
 import { useAtomValue } from "@effect/atom-react";
 import { useEffect, useMemo } from "react";
 
 import { isCommandPaletteOpen } from "../commandPaletteBus";
-import { ThreadRouteView } from "../components/ThreadRouteView";
+import { SessionWorkspace } from "../components/session-workspace/SessionWorkspace";
 import { resolveThreadRouteTarget } from "../threadRoutes";
 import { useClientSettings, useLegacySidebarEnabled } from "../hooks/useSettings";
 import { openCommandPalette } from "../commandPaletteBus";
@@ -29,6 +30,10 @@ import { stackedThreadToast, toastManager } from "~/components/ui/toast";
 import { primaryServerKeybindingsAtom } from "~/state/server";
 
 function ChatRouteGlobalShortcuts() {
+  const workspaceTarget = useParams({
+    strict: false,
+    select: (params) => resolveThreadRouteTarget(params),
+  });
   const clearSelection = useThreadSelectionStore((state) => state.clearSelection);
   const selectedThreadKeysSize = useThreadSelectionStore((state) => state.selectedThreadKeys.size);
   const { activeDraftThread, activeThread, defaultProjectRef, handleNewThread, routeThreadRef } =
@@ -95,6 +100,17 @@ function ChatRouteGlobalShortcuts() {
         return;
       }
 
+      if (
+        command === "workspace.toggle" &&
+        workspaceTarget &&
+        useSessionWorkspace.getState().available
+      ) {
+        event.preventDefault();
+        const state = useSessionWorkspace.getState();
+        if (state.enabled) state.disable();
+        else state.enable(workspaceTarget);
+        return;
+      }
       if (command === "chat.newLocal") {
         event.preventDefault();
         event.stopPropagation();
@@ -188,6 +204,7 @@ function ChatRouteGlobalShortcuts() {
   }, [
     activeDraftThread,
     activeThread,
+    workspaceTarget,
     clearSelection,
     handleNewThread,
     keybindings,
@@ -216,7 +233,7 @@ function ChatRouteLayout() {
   return (
     <>
       <ChatRouteGlobalShortcuts />
-      {threadTarget ? <ThreadRouteView target={threadTarget} /> : <Outlet />}
+      {threadTarget ? <SessionWorkspace target={threadTarget} /> : <Outlet />}
     </>
   );
 }

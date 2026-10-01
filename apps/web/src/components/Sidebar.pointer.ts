@@ -12,6 +12,7 @@ type Options = {
   distance: number;
   onAttach: (sensor: SidebarPointerSensor) => void;
   onFinish: (started: boolean) => void;
+  onRelease?: (event: PointerEvent) => boolean;
 };
 
 /** A sidebar gesture ends on release, cancellation, or loss of its window.
@@ -94,7 +95,10 @@ export class SidebarPointerSensor {
   };
 
   private end = (event: PointerEvent) => {
-    if (event.pointerId === this.pointer.pointerId) this.finish(false);
+    if (event.pointerId === this.pointer.pointerId) {
+      const consumed = this.phase === "dragging" && this.props.options.onRelease?.(event) === true;
+      this.finish(consumed);
+    }
   };
   private pointerCancel = (event: PointerEvent) => {
     if (event.pointerId === this.pointer.pointerId) this.cancel();
